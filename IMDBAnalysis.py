@@ -9,6 +9,11 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.linear_model import LassoCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import BayesianRidge
 
 def read_csv_to_list(file_path):
     """
@@ -300,4 +305,179 @@ def one_hot_encode_genre_column(df, column_name='Genre', separator=', '):
     df_encoded.drop(columns=[column_name], inplace=True)
     
     return df_encoded
+
+def test_train_split(df, p):
+    """
+    Splits the data table into a training set and a testing set.
+
+    Args:
+        df (pandas.DataFrame): DataFrame which will contain training and testing data
+        p (int): Integer value between 0 and 1 which wil determine the test set proportion of the df.
+
+    Returns:
+        pandas.DataFrame: Four separate DataFrames containing training features (X_train), testing features(X_test), training results(y_train), and testing results(y_test).
+    """
+    # Listing the features
+    X = df[df.columns.to_list()]
+
+    # Setting the dependent variable
+    y = df['IMDB Rating']
+
+    # Splitting the dataframe
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=p, random_state=210)
+
+    return X_train, X_test, y_train, y_test
+
+def linear_pred(X_train, X_test, y_train):
+    """
+    Performs a simple linear regression model using training and testing data.
+
+    Args:
+        X_train (pandas.DataFrame): A DataFrame containing the training features from the test_train_split.
+        X_test (pandas.DataFrame): A DataFrame containing the testing features from the test_train_split.
+        y_train (pandas.DataFrame): A DataFrame containing the actual rating values corresponding to the X_train features.
+
+    Returns:
+        pandas.DataFrame: A DataFrame with the coefficients (weights) of the different features in the linear model.
+    """
+    # Creating a regressor
+    regressor = LinearRegression()
+
+    # Fitting the training data into the regressor
+    regressor.fit(X_train, y_train)    
+
+    # Finding the coefficients from the regressor
+    coefficients = pd.DataFrame({'Feature': X_test.columns, 'Coefficient': regressor.coef_})
+
+    return coefficients
+
+def lasso_reg(X_train, X_test, y_train):
+    """
+    Performs a lasso regression using the training and testing data.
+
+    Args:
+        X_train (pandas.DataFrame): A DataFrame containing the training features from the test_train_split.
+        X_test (pandas.DataFrame): A DataFrame containing the testing features from the test_train_split.
+        y_train (pandas.DataFrame): A DataFrame containing the actual rating values corresponding to the X_train features.
+
+    Returns:
+        numpy.Array: A list of features with non-zero lasso coefficients, and a list of the lasso coefficients.
+    """
+    lasso = LassoCV(cv=10)
+    lasso.fit(X_train, y_train)
+
+    selected_features = X_test.columns[lasso.coef_ != 0]
+    coefficients = lasso.coef_[lasso.coef_ != 0]
+    return selected_features, coefficients
+
+def lasso_plot(selected_features, coefficients):
+    """
+    Plots the lasso regression coefficients.
+
+    Args:
+        selected_features (numpy.Array): A list of lasso selected features from lasso_reg.
+        coefficients (numpy.Array): A list of lasso coeefficients from lasso_reg
+
+    Returns:
+        None.
+    """
+    plt.figure(figsize=(10, 6))
+
+    plt.barh(selected_features, coefficients)
+
+    plt.xlabel('Coefficient Value')
+    plt.ylabel('Feature')
+    plt.title('Lasso Regression Coefficients')
+    plt.show()
+
+def ridge_reg(num_features, cat_features, X_train, y_train, X_test):
+    """
+    Performs a Bayesian Ridge Regression using the training and testing features.
+
+    Args:
+        num_features (numpy.Array): A list of the numerical features
+        cat_features (numpy.Array): A list of the categorical features
+        X_train (pandas.DataFrame): A DataFrame containing the training features from the test_train_split.
+        X_test (pandas.DataFrame): A DataFrame containing the testing features from the test_train_split.
+        y_train (pandas.DataFrame): A DataFrame containing the actual rating values corresponding to the X_train features.
+
+    Returns:
+        numpy.Array: A list of rating predictions for each row of X_test 
+    """
+    # Standardizing the numerical features
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', StandardScaler(), num_features),
+            ('cat', 'passthrough', cat_features)
+        ])
+    # Creating Bayesian Ridge model using standardized numerical features and one hot encoded categorical features.
+    model = Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('regressor', BayesianRidge())
+    ])
+    # Dropping unused columns and resetting index.
+    X_train.drop(['Movie Name', 'Release Year', 'IMDB Rating', 'Metascore', 'Director', 'Cast'], axis = 1)
+    X_train.reset_index(drop=True, inplace=True)
+
+    # Fitting the Bayesian Ridge model
+    model.fit(X_train, y_train)
+
+    # Getting predicted ratings using the model.
+    y_pred = model.predict(X_test)
+    X_test.reset_index(drop=True, inplace=True)
+
+    return y_pred
+
+def get_mse(y_test, y_pred):
+    """
+    Gets the mean squared error by squaring the difference between predicted y and actual y
+
+    Args:
+        y_test (numpy.Array): A list of actual rating values in the test set of the initial dataframe.
+        y_pred (numpy.Array): A list of predicted rating values from the ridge regression.
+
+    Returns:
+        int: The mean squared error.
+    """
+    mse = mean_squared_error(y_test, y_pred)
+
+    return mse
+
+def get_res_df(y_pred, X_test):
+
+    """
+    Enters the predicted and actual ratings into a DataFrame.
+
+    Args:
+        y_pred (numpy.Array): A list of predicted values from ridge regression.
+        X_test (pandas.DataFrame): A DataFrame containing the test set features from the test_train_split
+
+    Returns:
+        pandas.DataFrame: A DataFrame with the predicted ratings corresponding to the testing ratings.
+    """
+    res = pd.DataFrame({'Predicted': y_pred, 'Actual': X_test['IMDB Rating']})
+
+    return res
+
+def plot_pred_act(res):
+    """
+    Plots the predicted ratings and actual ratings.
+
+    Args:
+        res (pandas.DataFrame): A DataFrame containing the predicted ratings and actual ratings.
+
+    Returns:
+        None.
+    """
+    xax = res.index.to_numpy()
+    y1ax = res['Predicted'].to_numpy()
+    y2ax = res['Actual'].to_numpy()
+    plt.plot(xax, y1ax, label ='Predicted')
+    plt.plot(xax, y2ax, '-', label ='Actual')
+
+    plt.xlabel("Index")
+    plt.ylabel("Rating")
+    plt.legend()
+    plt.title('Prediction vs Actual')
+    plt.show()
 
