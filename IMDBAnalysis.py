@@ -277,6 +277,58 @@ def plot_total_votes_by_year(df):
     plt.tight_layout()
     plt.show()
     
+def plot_metascore_vs_votes(df):
+    """
+    Creates a scatter plot of Metascore against the number of votes.
+
+    Args:
+        df (pandas.DataFrame): The input DataFrame containing the movie data.
+
+    Returns:
+        None
+    """
+    # Extract 'Metascore' and 'Votes' columns
+    metascore = df['Metascore']
+    votes = df['Votes']
+
+    # Plot scatter plot
+    plt.figure(figsize=(10, 6))
+    plt.scatter(votes, metascore, alpha=0.5)
+    plt.title('Scatter Plot of Metascore vs. Number of Votes')
+    plt.xlabel('Number of Votes')
+    plt.ylabel('Metascore')
+    plt.grid(True)
+    plt.show()
+    
+def plot_imdb_rating_vs_votes(df):
+    """
+    Creates a scatter plot of imdb rating against the number of votes.
+
+    Args:
+        df (pandas.DataFrame): The input DataFrame containing the movie data.
+
+    Returns:
+        None
+    """
+    # Extract 'Metascore' and 'Votes' columns
+    imdb = df['IMDB Rating']
+    votes = df['Votes']
+
+    # Plot scatter plot
+    plt.figure(figsize=(10, 6))
+    plt.scatter(votes, imdb, alpha=0.5)
+    plt.title('Scatter Plot of IMDB Rating vs. Number of Votes')
+    plt.xlabel('Number of Votes')
+    plt.ylabel('IMDB Rating')
+    plt.grid(True)
+    plt.show()
+    
+def remove_commas(x):
+    if isinstance(x, str):
+        return x.replace(',', '')
+    else:
+        return str(x)
+
 def one_hot_encode_genre_column(df, column_name='Genre', separator=', '):
     """
     Performs one-hot encoding on a specified column containing genres.
@@ -480,4 +532,3 @@ def plot_pred_act(res):
     plt.legend()
     plt.title('Prediction vs Actual')
     plt.show()
-
