@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import re
 import matplotlib.pyplot as plt
-from collections import Counter
+from collections import Counter, defaultdict
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -49,25 +49,59 @@ def read_csv_to_df(file_path):
 
 def get_top_actors(df, n):
     """
-    Finds the top n actors based on the frequency of their appearances in the dataset.
-    
+    Finds the top n actors based on the frequency of their appearances in the dataset, along with their average IMDb rating, average Metascore, and most popular genre.
+
     Args:
         df (pandas.DataFrame): The input DataFrame containing the movie data.
         n (int): The number of top actors to return.
-        
+
     Returns:
-        pandas.Series: A Series containing the top n actors and their frequencies.
+        dict: A dictionary containing the top n actors and their frequencies, average IMDb ratings, average Metascores, and most popular genres.
     """
     # Isolate the cast column and split it into individual actors
     all_actors = [actor.strip() for cast in df['Cast'] for actor in cast.split(', ')]
-    
+
     # Count the frequency of each actor
     actor_counts = Counter(all_actors)
-    
+
     # Sort the actors by their frequency and get the top n
-    top_actors = pd.Series(actor_counts).sort_values(ascending=False)[:n]
-    
-    return top_actors
+    top_actors = [actor for actor, _ in actor_counts.most_common(n)]
+
+    # Initialize dictionaries to store actor information
+    actor_info = defaultdict(lambda: {'count': 0, 'imdb_ratings': [], 'metascores': [], 'genres': []})
+
+    # Iterate through the DataFrame and populate actor information
+    for _, row in df.iterrows():
+        cast = row['Cast'].split(', ')
+        genre = row['Genre'].split(', ')
+        imdb_rating = row['IMDB Rating']
+        metascore = row['Metascore']
+
+        for actor in cast:
+            actor = actor.strip()
+            if actor in top_actors:
+                actor_info[actor]['count'] += 1
+                actor_info[actor]['imdb_ratings'].append(imdb_rating)
+                actor_info[actor]['metascores'].append(metascore)
+                actor_info[actor]['genres'].extend(genre)
+
+    # Calculate average IMDb ratings, average Metascores, and most popular genres for each actor
+    result = {}
+    for actor in top_actors:
+        info = actor_info[actor]
+        avg_imdb_rating = sum(info['imdb_ratings']) / len(info['imdb_ratings']) if info['imdb_ratings'] else 0
+        avg_metascore = sum(info['metascores']) / len(info['metascores']) if info['metascores'] else 0
+        genre_counts = Counter(info['genres'])
+        most_popular_genre = max(genre_counts.items(), key=lambda x: x[1])[0] if genre_counts else ''
+
+        result[actor] = {
+            'count': info['count'],
+            'avg_imdb_rating': avg_imdb_rating,
+            'avg_metascore': avg_metascore,
+            'most_popular_genre': most_popular_genre
+        }
+
+    return result
 
 
 def plot_movies_by_decade(df, title='Number of Movies by Decade', x_label='Decade', y_label='Number of Movies'):
@@ -80,8 +114,14 @@ def plot_movies_by_decade(df, title='Number of Movies by Decade', x_label='Decad
         x_label (str, optional): The label for the x-axis. Default is 'Decade'.
         y_label (str, optional): The label for the y-axis. Default is 'Number of Movies'.
     """
-    # Convert 'Release Year' column to integer
-    df['Release Year'] = pd.to_numeric(df['Release Year'], errors='coerce')
+    # Convert 'Release Year' column to string type
+    df['Release Year'] = df['Release Year'].astype(str)
+
+    # Remove non-numeric characters and extract a single year
+    df['Release Year'] = df['Release Year'].str.extract(r'(\d{4})')
+
+    # Convert 'Release Year' column to integer type
+    df['Release Year'] = df['Release Year'].astype(float).astype(pd.Int64Dtype())
     
     # Drop rows with NaN values in 'Release Year' column
     df = df.dropna(subset=['Release Year'])
@@ -121,11 +161,17 @@ def plot_average_gross_by_year(df, title='Average Gross Value of Movies by Year'
         figure_size (tuple, optional): The size of the plot figure in inches. Default is (10, 6).
         xticks_rotation (int, optional): The rotation angle for the x-axis tick labels. Default is 45.
     """
+    # Convert 'Release Year' column to string type
+    df['Release Year'] = df['Release Year'].astype(str)
+
+    # Remove non-numeric characters and extract a single year
+    df['Release Year'] = df['Release Year'].str.extract(r'(\d{4})')
+
+    # Convert 'Release Year' column to integer type
+    df['Release Year'] = df['Release Year'].astype(float).astype(pd.Int64Dtype())
+    
     # Create a copy of the DataFrame (did this to avoid getting errors)
     df_copy = df.copy()
-    
-    # Convert 'Release Year' column to integer
-    df_copy['Release Year'] = pd.to_numeric(df_copy['Release Year'], errors='coerce')
     
     # Drop rows with NaN values in 'Release Year' column
     df_copy = df_copy.dropna(subset=['Release Year'])
@@ -153,26 +199,35 @@ def plot_average_gross_by_year(df, title='Average Gross Value of Movies by Year'
 def get_top_1939_movies_by_gross(df, n=5):
     """
     Returns the top n movies made in 1939 by gross value.
-    
+
     Args:
         df (pandas.DataFrame): The input DataFrame containing the movie data.
         n (int, optional): The number of top movies to return. Default is 5.
-    
+
     Returns:
         pandas.DataFrame: A DataFrame containing the top n movies made in 1939 by gross value.
     """
+    # Convert 'Release Year' column to string type
+    df['Release Year'] = df['Release Year'].astype(str)
+
+    # Remove non-numeric characters and extract a single year
+    df['Release Year'] = df['Release Year'].str.extract(r'(\d{4})')
+
+    # Convert 'Release Year' column to integer type
+    df['Release Year'] = df['Release Year'].astype(float).astype(pd.Int64Dtype())
+    
     # Filter the DataFrame to only include movies from 1939
     movies_1939 = df[df['Release Year'] == 1939].copy()
-    
+
     # Remove all non-numeric characters from the 'Gross' column
     movies_1939.loc[:, 'Gross'] = movies_1939['Gross'].apply(lambda x: re.sub(r'[^0-9.]', '', str(x)))
-    
+
     # Convert the 'Gross' column to numeric
     movies_1939.loc[:, 'Gross'] = pd.to_numeric(movies_1939['Gross'], errors='coerce')
-    
+
     # Sort the movies by gross value in descending order and get the top n
     top_1939_movies = movies_1939.sort_values('Gross', ascending=False).head(n)
-    
+
     # Return only 'Movie Name' and 'Gross' columns
     return top_1939_movies[['Movie Name', 'Gross']]
 
@@ -185,7 +240,7 @@ def get_top_highest_grossing_movies(df, n):
         n (int): The number of top highest-grossing movies to retrieve.
     
     Returns:
-        None
+        Prints subset of original dataframe
     """
     # Remove all non-numeric characters from 'Gross' column
     df['Gross'] = df['Gross'].apply(lambda x: re.sub(r'[^0-9.]', '', str(x)))
@@ -197,7 +252,7 @@ def get_top_highest_grossing_movies(df, n):
     top_n_highest_grossing_movies = df.sort_values(by='Gross', ascending=False).head(n)
     
     # Extract 'Movie Name' and 'Gross' columns
-    top_n_movie_names_and_gross = top_n_highest_grossing_movies[['Movie Name', 'Gross']]
+    top_n_movie_names_and_gross = top_n_highest_grossing_movies[['Movie Name', 'Gross', 'IMDB Rating', 'Metascore']]
     
     # Display the top n highest-grossing movies with their names and gross values
     print(top_n_movie_names_and_gross)
@@ -213,6 +268,15 @@ def plot_average_metascore_by_year(df):
     Returns:
         None
     """
+    # Convert 'Release Year' column to string type
+    df['Release Year'] = df['Release Year'].astype(str)
+
+    # Remove non-numeric characters and extract a single year
+    df['Release Year'] = df['Release Year'].str.extract(r'(\d{4})')
+
+    # Convert 'Release Year' column to integer type
+    df['Release Year'] = df['Release Year'].astype(float).astype(pd.Int64Dtype())
+    
     # Group movies by year and calculate the average Metascore for each year
     average_metascore_by_year = df.groupby('Release Year')['Metascore'].mean()
 
@@ -235,6 +299,15 @@ def plot_average_imdb_rating_by_year(df):
     Returns:
         None
     """
+    # Convert 'Release Year' column to string type
+    df['Release Year'] = df['Release Year'].astype(str)
+
+    # Remove non-numeric characters and extract a single year
+    df['Release Year'] = df['Release Year'].str.extract(r'(\d{4})')
+
+    # Convert 'Release Year' column to integer type
+    df['Release Year'] = df['Release Year'].astype(float).astype(pd.Int64Dtype())
+    
     # Group movies by year and calculate the average IMDb rating for each year
     average_imdb_rating_by_year = df.groupby('Release Year')['IMDB Rating'].mean()
 
@@ -259,6 +332,15 @@ def plot_total_votes_by_year(df):
     Returns:
         None
     """
+    # Convert 'Release Year' column to string type
+    df['Release Year'] = df['Release Year'].astype(str)
+
+    # Remove non-numeric characters and extract a single year
+    df['Release Year'] = df['Release Year'].str.extract(r'(\d{4})')
+
+    # Convert 'Release Year' column to integer type
+    df['Release Year'] = df['Release Year'].astype(float).astype(pd.Int64Dtype())
+    
     # Remove all non-numeric characters from 'Votes' column and convert it to numeric
     df['Votes'] = df['Votes'].replace('[^\d.]', '', regex=True)
     df['Votes'] = pd.to_numeric(df['Votes'], errors='coerce')
